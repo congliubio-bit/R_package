@@ -1,30 +1,38 @@
-# Load required libraries
 library(dplyr)
+library(rlang)
 library(pharmaverseadam)
 
-# 1. Load the test ADTTE dataset
-data("adtte") 
+# 1. Load the data
+data("adtte_onco")
 
-# 2. Define the core function for the Censoring Table
-generate_censoring_summary <- function(dataset, pop_flag, endpoint_param) {
+# 2. Updated Function based on exact colnames
+generate_censoring_summary <- function(dataset, endpoint_param, pop_col = NULL, pop_val = "Y") {
   
-  # Step A: Filter based on user "dropdown" selections
-  # Using .data[[pop_flag]] allows us to pass column names as strings (like a UI dropdown would)
+  # Step A: Filter for the Endpoint
   df_filtered <- dataset %>%
-    filter(.data[[pop_flag]] == "Y" & PARAMCD == endpoint_param)
+    filter(PARAMCD == endpoint_param)
   
-  # Step B: Calculate overall totals
+  # Step B: Optional Population Filter (if the column exists)
+  if (!is.null(pop_col)) {
+    if (pop_col %in% colnames(df_filtered)) {
+      df_filtered <- df_filtered %>%
+        filter(.data[[pop_col]] == pop_val)
+    } else {
+      warning(sprintf("Column '%s' not found. Running on all subjects for this endpoint.", pop_col))
+    }
+  }
+  
+  # Step C: Calculate metrics
   n_total <- nrow(df_filtered)
   
   if (n_total == 0) {
-    stop("No data found for the selected population and endpoint.")
+    stop("No data found for this endpoint/population.")
   }
   
   n_events <- sum(df_filtered$CNSR == 0, na.rm = TRUE)
   n_censored <- sum(df_filtered$CNSR > 0, na.rm = TRUE)
   
-  # Step C: Calculate breakdowns for Censor Reasons
-  # Filtering for censored subjects (CNSR > 0) and counting by EVNTDESC
+  # Step D: Censor Reasons (using EVNTDESC)
   censor_reasons <- df_filtered %>%
     filter(CNSR > 0) %>%
     group_by(EVNTDESC) %>%
@@ -32,46 +40,39 @@ generate_censoring_summary <- function(dataset, pop_flag, endpoint_param) {
     mutate(Percent = (Count / n_total) * 100) %>%
     arrange(desc(Count))
   
-  # Step D: Generate the requested text output format
+  # Step E: Print to Console EXACTLY matching your feature notes
   cat(sprintf("Endpoint: %s\n\n", endpoint_param))
   cat(sprintf("Overall (N=%d)\n", n_total))
   
-  cat(sprintf("Number of Events\n"))
+  cat("Number of Events\n")
   cat(sprintf("%d (%.1f%%)\n", n_events, (n_events / n_total) * 100))
   
-  cat(sprintf("Number of Censored Subjects\n"))
+  cat("Number of Censored Subjects\n")
   cat(sprintf("%d (%.1f%%)\n", n_censored, (n_censored / n_total) * 100))
   
-  # Loop through each censor reason to print
-  for (i in 1:nrow(censor_reasons)) {
-    reason <- censor_reasons$EVNTDESC[i]
-    count <- censor_reasons$Count[i]
-    pct <- censor_reasons$Percent[i]
-    
-    cat(sprintf("  %s\n", reason))
-    cat(sprintf("  %d (%.1f%%)\n", count, pct))
+  for (i in seq_len(nrow(censor_reasons))) {
+    cat(sprintf("%s\n", censor_reasons$EVNTDESC[i]))
+    cat(sprintf("%d (%.1f%%)\n", censor_reasons$Count[i], censor_reasons$Percent[i]))
   }
   
-  # Step E: Create the "Export" dataset
-  # Including USUBJID, SITEID, and the censor reason (EVNTDESC)
+  # Step F: Export Dataset (SITEID is missing, so using STUDYID instead)
   export_df <- df_filtered %>%
     filter(CNSR > 0) %>%
-    select(USUBJID, SITEID, Censor_Reason = EVNTDESC)
+    select(STUDYID, USUBJID, Censor_Reason = EVNTDESC)
   
-  # Return the export dataframe invisibly so it can be saved/downloaded
   return(invisible(export_df))
 }
 
-# --- Example Usage ---
+# --- Test it on the pharmaverse dataset ---
 
-# Simulate a user selecting "Intent-to-Treat" (ITTFL) and "Overall Survival" (OS)
-cat("--- UI Output Simulation ---\n")
+# We will run it for Overall Survival (OS). 
+# We leave pop_col = NULL since ITTFL isn't in these colnames.
+cat("\n--- Running Feature --- \n\n")
 export_data <- generate_censoring_summary(
-  dataset = adtte, 
-  pop_flag = "ITTFL", 
-  endpoint_param = "OS"
+  dataset = adtte_onco, 
+  endpoint_param = "OS", 
+  pop_col = NULL 
 )
 
-# View the first few rows of the generated export file
-cat("\n--- Export Dataset Preview ---\n")
-print(head(export_data))
+cat("\n--- Preview Export Data --- \n")
+print(head(export_data, 3))
