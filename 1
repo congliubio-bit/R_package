@@ -76,3 +76,69 @@ export_data <- generate_censoring_summary(
 
 cat("\n--- Preview Export Data --- \n")
 print(head(export_data, 3))
+
+
+
+'''
+Role & Context:
+You are an expert clinical R programmer. We are building an R package for an Oncology Standard Reporting Process (SRP). I need you to write a production-ready R function that generates a "Censoring Table" for Time-to-Event data using standard ADaM datasets.
+
+Objective:
+Write an R function named generate_censoring_summary that takes an ADTTE dataset, filters it based on user inputs, calculates censoring metrics, prints a specific formatted summary to the console, and returns an exportable dataframe of censored subjects.
+
+Function Inputs:
+
+dataset: A standard ADaM ADTTE dataframe.
+
+endpoint_param: A string representing the endpoint code (e.g., "OS" for PARAMCD).
+
+pop_col: A string representing the population flag column (e.g., "ITTFL" or "SAFFL"). This should default to NULL.
+
+pop_val: A string representing the inclusion value for the population flag. This should default to "Y".
+
+Step-by-Step Logic Requirements:
+
+Step 1: Filtering: >     * Filter the dataset where PARAMCD equals the endpoint_param.
+
+If pop_col is provided by the user, verify the column exists in the dataset. If it exists, filter the data where that column equals pop_val. If it does NOT exist, issue a warning but continue executing the function using all rows for that endpoint.
+
+Step 2: Core Calculations: >     * Calculate the Total Patients (N) in the filtered dataset. If N is 0, stop the function with an informative error.
+
+Calculate the "Number of Events" (where the CNSR column == 0).
+
+Calculate the "Number of Censored Subjects" (where the CNSR column > 0).
+
+Step 3: Censor Reasons Breakdown: >     * For only the censored subjects (CNSR > 0), calculate the count and percentage of each specific censoring reason using the EVNTDESC column.
+
+Sort these reasons in descending order of their frequency.
+
+Note: All percentages in this function should use the Total Patients (N) as the denominator.
+
+Step 4: Console Output: >     * Print the results to the console EXACTLY matching the layout below (replace the 'XX' with calculated numbers and percentages rounded to 1 decimal place):
+```text
+Endpoint: [Endpoint Name]
+
+  Overall (N=XX)
+  Number of Events
+  XX (XX.X%)
+  Number of Censored Subjects
+  XX (XX.X%)
+  [Censor Reason 1 from EVNTDESC]
+  XX (XX.X%)
+  [Censor Reason 2 from EVNTDESC]
+  XX (XX.X%)
+  ```
+Step 5: Export Data: >     * Create a subset dataframe containing ONLY the censored subjects.
+
+Select the columns: STUDYID, USUBJID, and EVNTDESC. Rename EVNTDESC to Censor_Reason in the output.
+
+Return this subset dataframe invisibly so it can be assigned to a variable without printing twice.
+
+Constraints:
+
+Use dplyr and rlang for data manipulation.
+
+Write clean, defensively programmed code.
+
+Provide a short example of how to run the function.
+'''
