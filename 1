@@ -1,0 +1,77 @@
+# Load required libraries
+library(dplyr)
+library(pharmaverseadam)
+
+# 1. Load the test ADTTE dataset
+data("adtte") 
+
+# 2. Define the core function for the Censoring Table
+generate_censoring_summary <- function(dataset, pop_flag, endpoint_param) {
+  
+  # Step A: Filter based on user "dropdown" selections
+  # Using .data[[pop_flag]] allows us to pass column names as strings (like a UI dropdown would)
+  df_filtered <- dataset %>%
+    filter(.data[[pop_flag]] == "Y" & PARAMCD == endpoint_param)
+  
+  # Step B: Calculate overall totals
+  n_total <- nrow(df_filtered)
+  
+  if (n_total == 0) {
+    stop("No data found for the selected population and endpoint.")
+  }
+  
+  n_events <- sum(df_filtered$CNSR == 0, na.rm = TRUE)
+  n_censored <- sum(df_filtered$CNSR > 0, na.rm = TRUE)
+  
+  # Step C: Calculate breakdowns for Censor Reasons
+  # Filtering for censored subjects (CNSR > 0) and counting by EVNTDESC
+  censor_reasons <- df_filtered %>%
+    filter(CNSR > 0) %>%
+    group_by(EVNTDESC) %>%
+    summarise(Count = n(), .groups = 'drop') %>%
+    mutate(Percent = (Count / n_total) * 100) %>%
+    arrange(desc(Count))
+  
+  # Step D: Generate the requested text output format
+  cat(sprintf("Endpoint: %s\n\n", endpoint_param))
+  cat(sprintf("Overall (N=%d)\n", n_total))
+  
+  cat(sprintf("Number of Events\n"))
+  cat(sprintf("%d (%.1f%%)\n", n_events, (n_events / n_total) * 100))
+  
+  cat(sprintf("Number of Censored Subjects\n"))
+  cat(sprintf("%d (%.1f%%)\n", n_censored, (n_censored / n_total) * 100))
+  
+  # Loop through each censor reason to print
+  for (i in 1:nrow(censor_reasons)) {
+    reason <- censor_reasons$EVNTDESC[i]
+    count <- censor_reasons$Count[i]
+    pct <- censor_reasons$Percent[i]
+    
+    cat(sprintf("  %s\n", reason))
+    cat(sprintf("  %d (%.1f%%)\n", count, pct))
+  }
+  
+  # Step E: Create the "Export" dataset
+  # Including USUBJID, SITEID, and the censor reason (EVNTDESC)
+  export_df <- df_filtered %>%
+    filter(CNSR > 0) %>%
+    select(USUBJID, SITEID, Censor_Reason = EVNTDESC)
+  
+  # Return the export dataframe invisibly so it can be saved/downloaded
+  return(invisible(export_df))
+}
+
+# --- Example Usage ---
+
+# Simulate a user selecting "Intent-to-Treat" (ITTFL) and "Overall Survival" (OS)
+cat("--- UI Output Simulation ---\n")
+export_data <- generate_censoring_summary(
+  dataset = adtte, 
+  pop_flag = "ITTFL", 
+  endpoint_param = "OS"
+)
+
+# View the first few rows of the generated export file
+cat("\n--- Export Dataset Preview ---\n")
+print(head(export_data))
