@@ -1,0 +1,55 @@
+library(DBI)
+library(RPostgres)
+
+# 1. Connect using credentials stored in your .Renviron file
+con <- dbConnect(
+  RPostgres::Postgres(),
+  dbname = "aact",
+  host = "aact-db.ctti-clinicaltrials.org",
+  port = 5432,
+  user = Sys.getenv("AACT_USER"),     
+  password = Sys.getenv("AACT_PASS") 
+)
+
+# 2. Define the SQL query with phase and study type groupings
+# Note: PostgreSQL uses 'percentile_cont' to calculate medians and percentiles
+sql_query <- "
+  SELECT 
+    f.country,
+    s.study_type,
+    s.phase,
+    ROUND(AVG(f.site_count), 2) AS mean_sites,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY f.site_count) AS median_sites,
+    PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY f.site_count) AS p90_sites,
+    MAX(f.site_count) AS absolute_max_sites
+  FROM (
+    -- Subquery: Count sites per trial per country
+    SELECT 
+      nct_id, 
+      country, 
+      COUNT(id) AS site_count
+    FROM facilities
+    GROUP BY nct_id, country
+  ) f
+  JOIN studies s ON f.nct_id = s.nct_id
+  -- Optional: If you want to restrict this to oncology or a specific domain
+  -- JOIN conditions c ON s.nct_id = c.nct_id 
+  -- WHERE c.downcase_name LIKE '%cancer%' OR c.downcase_name LIKE '%tumor%'
+  GROUP BY 
+    f.country, 
+    s.study_type, 
+    s.phase
+  ORDER BY 
+    f.country, 
+    s.study_type, 
+    s.phase;
+"
+
+# 3. Execute the query
+site_averages_df <- dbGetQuery(con, sql_query)
+
+# 4. Disconnect
+dbDisconnect(con)
+
+# View the results
+head(site_averages_df)
